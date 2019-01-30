@@ -5,7 +5,7 @@ from jetfactory.service import BaseService
 from jetfactory.utils import format_path
 
 
-class PackageService(BaseService):
+class APISpecService(BaseService):
     @staticmethod
     async def fields_by_schema(schema):
         for field_name, field in schema.declared_fields.items():
