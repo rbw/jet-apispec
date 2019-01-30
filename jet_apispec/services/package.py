@@ -1,11 +1,11 @@
 # -*- coding: utf-8 -*-
 
 from jetfactory import JetfactoryException, jetmgr
-from jetfactory.service import VanillaService
+from jetfactory.service import BaseService
 from jetfactory.utils import format_path
 
 
-class PackageService(VanillaService):
+class PackageService(BaseService):
     @staticmethod
     async def fields_by_schema(schema):
         for field_name, field in schema.declared_fields.items():
@@ -19,13 +19,10 @@ class PackageService(VanillaService):
 
     async def routes(self, controller):
         for handler_name, (path, route) in dict(controller.routes).items():
-            # meta = schema_fields = []
             schema_fields = []
 
             if route.schema:
                 schema_fields = [f async for f in self.fields_by_schema(route.schema)]
-                # if hasattr(schema, 'Meta'):
-                #    meta = route.schema.Meta
 
             yield dict(
                 handler=handler_name,

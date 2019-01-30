@@ -6,10 +6,10 @@ from .services import svc_pkgs
 
 
 class Controller(BaseController):
-    @route('/packages', 'GET', inject_request=False)
-    async def packages(self):
+    @route('/', 'GET')
+    async def packages(self, _):
         return jsonify(await svc_pkgs.get_pkgs())
 
-    @route('/packages/<package_name>', 'GET')
+    @route('/<package_name>', 'GET')
     async def package(self, package_name):
         return jsonify(await svc_pkgs.get_pkg(package_name))
