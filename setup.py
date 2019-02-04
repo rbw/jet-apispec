@@ -31,7 +31,7 @@ def find_version(path):
 
 
 readme = parse_file('README.md')
-version = find_version('jet_apispec/__version__.py')
+version = find_version('jet_apispec/__init__.py')
 
 pipenv_command = ['pipenv', 'install', '--deploy', '--system']
 pipenv_command_dev = pipenv_command + ['--dev']

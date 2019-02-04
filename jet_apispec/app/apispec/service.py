@@ -1,6 +1,12 @@
 # -*- coding: utf-8 -*-
 
-from jetfactory import JetfactoryException, jetmgr
+from functools import lru_cache
+
+from apispec import APISpec
+from apispec.ext.marshmallow import OpenAPIConverter, MarshmallowPlugin
+
+from jetfactory import jetmgr
+from jetfactory.exceptions import JetfactoryException
 from jetfactory.service import BaseService
 from jetfactory.utils import format_path
 
@@ -41,48 +47,63 @@ class APISpecService(BaseService):
             routes=[r async for r in self.routes(pkg.controller)]
         )
 
-    async def get_pkg(self, name):
-        pkg = jetmgr.get_pkg(name)
-        if not pkg:
-            raise JetfactoryException(f'Unknown package', 404)
+    @lru_cache()
+    def get_pkg_spec(self, name, pkg):
+        spec = APISpec(
+            title=name.capitalize(),
+            info={
+                'description': pkg.description,
+            },
+            version=pkg.version,
+            openapi_version='2.0',
+            plugins=[MarshmallowPlugin()]
+        )
 
-        return await self.pkg_extended(pkg)
+        return spec, spec.plugins[0].openapi
 
     async def get_pkgs(self):
-        return [await self.pkg_extended(pkg) for _, pkg in jetmgr.pkgs]
+        for name, pkg in jetmgr.pkgs:
+            spec = self.get_pkg_spec(name, pkg)
 
+            for handler_name, route in dict(pkg.controller.routes).items():
+                endpoint = {
+                    'summary': 'test',
+                    'operationId': handler_name,
+                    'tags': '',
+                    'parameters': []
+                }
 
-"""
-cls.openapi = pkg.spec.plugins[0].openapi
-from apispec.ext.marshmallow.openapi import OpenAPIConverter
-openapi: OpenAPIConverter
+                print(endpoint)
 
-endpoint = {
-    'summary': 'test',
-    'operationId': handler.__name__,
-    'tags': '',
-    'parameters': []
-}
+            #for handler_name, route in dict(pkg.controller.routes).items():
+            #    print(route)
 
-schemas = {}
+    async def get_pkg(self, name):
+        endpoint = {
+            'summary': 'test',
+            'operationId': handler.__name__,
+            'tags': '',
+            'parameters': []
+        }
 
-for group, field in schema.declared_fields.items():
-    if group == 'response':
-        field.dump_only = True
-        schemas[schema.__class__.__name__] = self.openapi.field2property(field, name=group)
-        continue
-    elif group == 'body':
-        field.load_only = True
+        schemas = {}
 
-    endpoint['parameters'].append(self.openapi.field2property(field, name=group))
+        for group, field in schema.declared_fields.items():
+            if group == 'response':
+                field.dump_only = True
+                schemas[schema.__class__.__name__] = self.openapi.field2property(field, name=group)
+                continue
+            elif group == 'body':
+                field.load_only = True
 
-    # data = self.openapi.field2property(field, name=group)
+            endpoint['parameters'].append(self.openapi.field2property(field, name=group))
 
-pprint(schemas)
+            # data = self.openapi.field2property(field, name=group)
 
-if route.path in data:
-    data[route.path].update({route.method: endpoint})
-else:
-    data[route.path] = {route.method: endpoint}
+        pprint(schemas)
 
-"""
+        if route.path in data:
+            data[route.path].update({route.method: endpoint})
+        else:
+            data[route.path] = {route.method: endpoint}
+

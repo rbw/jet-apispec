@@ -3,10 +3,12 @@
 from jetfactory import Jetpack
 from .app import svc_apispec, controller
 
-__jetpack__ = Jetpack(
+__version__ = '0.1.0'
+
+APP = Jetpack(
     name='apispec',
     description='OpenAPI specification generator',
     controller=controller,
     services=[svc_apispec],
-    models=[]
+    models=[],
 )
