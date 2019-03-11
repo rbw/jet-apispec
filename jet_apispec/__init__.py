@@ -1,14 +1,15 @@
 # -*- coding: utf-8 -*-
 
 from jetfactory import Jetpack
-from .app import svc_apispec, controller
+from .controller import Controller
+from .service import APISpecService
 
 __version__ = '0.1.0'
 
-pkg = Jetpack(
+export = Jetpack(
     name='apispec',
     description='OpenAPI specification generator',
-    controller=controller,
-    services=[svc_apispec],
+    controller=Controller,
+    services=[APISpecService],
     models=[],
 )

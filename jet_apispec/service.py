@@ -43,37 +43,40 @@ class APISpecService(BaseService):
             name=pkg.name,
             summary=pkg.meta.get('summary'),
             description=pkg.meta.get('description'),
-            path=format_path(self.sanic.config['API_BASE'], pkg.controller.path),
+            path=format_path(self.app.config['API_BASE'], pkg.controller.path),
             routes=[r async for r in self.routes(pkg.controller)]
         )
 
     @lru_cache()
     def get_pkg_spec(self, name, pkg):
-        spec = APISpec(
+        api_spec = APISpec(
             title=name.capitalize(),
             info={
                 'description': pkg.description,
             },
             version=pkg.version,
-            openapi_version='2.0',
+            openapi_version='3.0.2',
             plugins=[MarshmallowPlugin()]
         )
 
-        return spec, spec.plugins[0].openapi
+        return api_spec, api_spec.plugins[0].openapi
 
     async def get_pkgs(self):
         for name, pkg in jetmgr.pkgs:
-            spec = self.get_pkg_spec(name, pkg)
+            api_spec, openapi = self.get_pkg_spec(name, pkg)
 
-            for handler_name, route in dict(pkg.controller.routes).items():
+            for handler_name, (path_full, route, schema) in dict(pkg.controller.routes).items():
+                if not schema:
+                    continue
+
                 endpoint = {
                     'summary': 'test',
                     'operationId': handler_name,
                     'tags': '',
-                    'parameters': []
+                    'parameters': openapi.schema2parameters(schema)
                 }
 
-                print(endpoint)
+                print(openapi.schema2jsonschema(schema))
 
             #for handler_name, route in dict(pkg.controller.routes).items():
             #    print(route)
