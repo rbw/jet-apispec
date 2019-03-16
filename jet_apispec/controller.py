@@ -10,9 +10,9 @@ class Controller(BaseController):
         self.service = APISpecService()
 
     @route('/', 'GET')
-    async def visits_get(self, _):
+    async def packages_get(self, _):
         return jsonify(await self.service.get_pkgs())
 
     @route('/<package_name>', 'GET')
-    async def package_get(self, package_name):
+    async def package_get(self, _, package_name):
         return jsonify(await self.service.get_pkg(package_name))

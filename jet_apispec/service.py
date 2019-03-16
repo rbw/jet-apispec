@@ -1,112 +1,127 @@
 # -*- coding: utf-8 -*-
 
-from functools import lru_cache
-
-from apispec import APISpec
-from apispec.ext.marshmallow import OpenAPIConverter, MarshmallowPlugin
-
 from jetfactory import jetmgr
-from jetfactory.exceptions import JetfactoryException
 from jetfactory.service import BaseService
-from jetfactory.utils import format_path
+
+
+class ApiSpec:
+    _routes = None
+
+    def __init__(self, pkg):
+        self.version = pkg.version
+        self.title = pkg.name.capitalize()
+        self.description = pkg.description.capitalize()
+        self.servers = [
+            {
+                'url': 'make_configurable_in_spec_pkg'
+            }
+        ],
+        self.contact = {
+            'author': 'get_from_pkg',
+            'email': 'get_from_pkg',
+        }
+
+        self._routes = {}
+
+    def get_params(self, schema):
+        for field_name, field in schema.declared_fields.items():
+            yield {
+                'name': field_name,
+                'in': 'query',
+                'description': '',
+                'required': field.required,
+                'schema': {
+                    'type': field.__class__.__name__.lower()
+                }
+            }
+
+    def get_response(self, schema):
+        fields = {}
+        load_only = schema.Meta.load_only
+
+        # Uses protected _declared_fields for Nested recursion compatibility
+        for field_name, field in schema._declared_fields.items():
+            if field_name in load_only:
+                continue
+
+            if hasattr(field, 'nested'):
+                fields[field_name] = self.get_response(field.nested)
+                continue
+
+            fields[field_name] = dict(type=field.__class__.__name__)
+
+        response = {
+            'required': [],
+            'type': 'object',
+            'properties': fields
+        }
+
+        if hasattr(schema, 'many') and schema.many:
+            return {
+                'type': 'array',
+                'items': {
+                    'allOf': [response]
+                }
+            }
+
+        return response
+
+    def consume_stack(self, handler, route_stack):
+        schemas = route_stack.schemas
+        definition = {}
+
+        if route_stack.path not in self._routes:
+            self._routes[route_stack.path] = {}
+
+        if schemas['query']:
+            params = self.get_params(schemas['query'])
+            definition['parameters'] = list(params)
+
+        if schemas['response']:
+            response = self.get_response(schemas['response'])
+            definition['responses'] = {
+                '200': dict(
+                    description='',
+                    content={'application/json': dict(schema=response)}
+                )
+            }
+
+        self._routes[route_stack.path].update({
+            route_stack.method: {
+                'description': '',
+                'operationId': handler.__name__,
+                **definition,
+            }
+        })
+
+    @property
+    def schema(self):
+        schema = self.__dict__
+        routes = schema.pop('_routes')
+
+        return {
+            **schema,
+            'paths': routes
+        }
 
 
 class APISpecService(BaseService):
-    @staticmethod
-    async def fields_by_schema(schema):
-        for field_name, field in schema.declared_fields.items():
-            yield dict(
-                name=field_name,
-                type=field.__class__.__name__,
-                required=field.required,
-                load_only=field.load_only,
-                dump_only=field.dump_only,
-            )
+    pkgs = {}
 
-    async def routes(self, controller):
-        for handler_name, (path, route) in dict(controller.routes).items():
-            schema_fields = []
+    def on_ready(self):
+        self._generate_specs()
 
-            if route.schema:
-                schema_fields = [f async for f in self.fields_by_schema(route.schema)]
+    def _generate_specs(self):
+        for name, pkg in jetmgr.pkgs:
+            spec = ApiSpec(pkg)
 
-            yield dict(
-                handler=handler_name,
-                path=path,
-                method=route.method,
-                fields=schema_fields,
-                doc=route.doc
-            )
+            for route_stack in pkg.controller.stacks:
+                spec.consume_stack(*route_stack)
 
-    async def pkg_extended(self, pkg):
-        return dict(
-            name=pkg.name,
-            summary=pkg.meta.get('summary'),
-            description=pkg.meta.get('description'),
-            path=format_path(self.app.config['API_BASE'], pkg.controller.path),
-            routes=[r async for r in self.routes(pkg.controller)]
-        )
-
-    @lru_cache()
-    def get_pkg_spec(self, name, pkg):
-        api_spec = APISpec(
-            title=name.capitalize(),
-            info={
-                'description': pkg.description,
-            },
-            version=pkg.version,
-            openapi_version='3.0.2',
-            plugins=[MarshmallowPlugin()]
-        )
-
-        return api_spec, api_spec.plugins[0].openapi
+            self.pkgs[name] = spec.schema
 
     async def get_pkgs(self):
-        for name, pkg in jetmgr.pkgs:
-            api_spec, openapi = self.get_pkg_spec(name, pkg)
-
-            for handler_name, (path_full, route, schema) in dict(pkg.controller.routes).items():
-                if not schema:
-                    continue
-
-                endpoint = {
-                    'summary': 'test',
-                    'operationId': handler_name,
-                    'tags': '',
-                    'parameters': openapi.schema2parameters(schema)
-                }
-
-                print(openapi.schema2jsonschema(schema))
-
-            #for handler_name, route in dict(pkg.controller.routes).items():
-            #    print(route)
+        return self.pkgs.values()
 
     async def get_pkg(self, name):
-        endpoint = {
-            'summary': 'test',
-            'operationId': handler.__name__,
-            'tags': '',
-            'parameters': []
-        }
-
-        schemas = {}
-
-        for group, field in schema.declared_fields.items():
-            if group == 'response':
-                field.dump_only = True
-                schemas[schema.__class__.__name__] = self.openapi.field2property(field, name=group)
-                continue
-            elif group == 'body':
-                field.load_only = True
-
-            endpoint['parameters'].append(self.openapi.field2property(field, name=group))
-
-            # data = self.openapi.field2property(field, name=group)
-
-        pprint(schemas)
-
-        if route.path in data:
-            data[route.path].update({route.method: endpoint})
-        else:
-            data[route.path] = {route.method: endpoint}
-
+        return self.pkgs[name]
